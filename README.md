@@ -26,34 +26,63 @@
 此次比赛分为初赛和复赛两个阶段，两个阶段的区别是所提供样本的量级有所不同，其他的设置均相同。
 
 数据类别	变量	                         数值格式	           解释
+
 基本数据	sid	                             string	                 样本id/请求会话sid
+
 基本数据	label	                         int	                       是否作弊
+
 媒体信息	pkgname	                string	                包名(MD5加密)
+
 媒体信息	ver	                             string	                 app版本
+
 媒体信息	adunitshowid	      string	                对外广告位ID（MD5加密）
+
 媒体信息	mediashowid	       string	                  对外媒体ID（MD5加密）
-媒体信息	apptype	                  int	app                所属分类
+
+媒体信息	apptype	                  int	                         app所属分类
+
 时间	         nginxtime	              bigint	                请求到达服务时间，单位ms
+
 IP信息	     ip	                               string	                  客户端IP地址
+
 IP信息	     city	                            string	                 城市
+
 IP信息	     province                  string	                  省份
+
 IP信息	     reqrealip	               string	                    请求的http协议头携带IP，有可能是下游服务器的ip
+
 设备信息	adidmd5	                string	                    Adroid ID的MD5值
+
 设备信息	imeimd5	                 string	                    imei的MD5值
+
 设备信息	idfamd5	                  string	                   idfa的MD5值
+
 设备信息	openudidmd5	      string	                   openudid的MD5值
+
 设备信息	macmd5	                string	                   mac的MD5值
+
 设备信息	dvctype	                   int	                         设备类型 0 – 未知,1 – PC,2 – 手机, 3– 平板,4– 电视盒,5– 智能电视,6 – 可穿戴设备,7 – 智能家电,8 - 音箱,9 - 智能硬件
+
 设备信息	model	                       string	                    机型
+
 设备信息	make	                       string	                     厂商
+
 设备信息	ntt                              	int	                           网络类型 0-未知, 1-有线网, 2-WIFI, 3-蜂窝网络未知, 4-2G, 5-3G, 6–4G
+
 设备信息	carrier                     	string	                    运营商 0-未知, 46000-移动, 46001-联通, 46003-电信
+
 设备信息	os	                              string	                    操作系统 : Android, iOS
+
 设备信息	osv                             	string	                   操作系统版本
+
 设备信息	orientation	            int	                            横竖屏:0竖屏，1横屏
+
 设备信息	lan	                             string	                     语言
+
 设备信息	h	                                 int	                          设备高
+
 设备信息	w	                                int	                           设备宽
+
 设备信息	ppi                            	 int	                          屏幕密度
 
 2. 评估指标
@@ -61,9 +90,7 @@ IP信息	     reqrealip	               string	                    请求的http�
 本模型依据提交的结果文件，采用宏平均F1-score进行评价。
 
 1) 统计TP（正确预测作弊记录），FP（错将正常记录预测为作弊记录），FN（作弊记录预测为非作弊记录）；
-
 2) 通过第一步的统计值计算模型的precision和recall，计算公式如下：
-
 3) 通过第二步计算结果计算F1-score,得到最后评测结果，计算方式如下：
 
 3. 评测及排行
