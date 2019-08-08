@@ -2,6 +2,10 @@ import os
 
 
 def get_stopwords():
+    """
+    合并各个不同的停用词表
+    :return:
+    """
     try:
         stopwords_list = [u'中文停用词表.txt', u'哈工大停用词表.txt', u'四川大学机器智能实验室停用词库.txt', u'百度停用词表.txt']
 
