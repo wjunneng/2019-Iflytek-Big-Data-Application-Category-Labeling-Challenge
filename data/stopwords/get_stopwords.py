@@ -1,4 +1,6 @@
 import os
+from demo.config import DefaultConfig
+from demo import util
 
 
 def get_stopwords():
@@ -9,19 +11,19 @@ def get_stopwords():
     try:
         stopwords_list = [u'中文停用词表.txt', u'哈工大停用词表.txt', u'四川大学机器智能实验室停用词库.txt', u'百度停用词表.txt']
 
-        stopwords_dir = u'/'.join(os.path.abspath(__file__).split('/')[:-1])
+        # apptype_id_name
+        apptype_id_name = util.get_apptype_id_name()
 
         result = set()
-
         for stopwords_file in stopwords_list:
             print(stopwords_file)
-            with open(stopwords_dir + '/' + stopwords_file, 'r') as file:
+            with open(DefaultConfig().project_path + '/data/stopwords/' + stopwords_file, 'r') as file:
                 lines = file.readlines()
                 for line in lines:
-                    if line not in result:
+                    if line not in result and line not in apptype_id_name[u'label']:
                         result.add(line)
 
-        with open(stopwords_dir + '/stopwords.txt', 'w') as file:
+        with open(DefaultConfig().stopwords_path, 'w') as file:
             for words in result:
                 file.write(words)
 

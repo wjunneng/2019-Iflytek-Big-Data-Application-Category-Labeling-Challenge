@@ -39,7 +39,7 @@ print('数据读入完成！')
 
 # ========================以|为分隔符，把标签分割：===============================
 train['label1'] = train['label'].apply(lambda x: x.split('|')[0])
-##第二个标签有些没有，此处补0
+# 第二个标签有些没有，此处补0
 train['label2'] = train['label'].apply(lambda x: x.split('|')[1] if '|' in x else 0)
 # print('训练集第一个标签分布：', train.label1.value_counts())
 '''
@@ -77,13 +77,16 @@ label = train['label1']
 num_class = train['label1'].max() + 1
 
 # =======================模型训练：5折交叉验证=========================================
+from sklearn.linear_model import SGDClassifier
+
 n_splits = 5
 stack_train = np.zeros((train.shape[0], num_class))
 stack_test = np.zeros((test.shape[0], num_class))
 for i, (tr, va) in enumerate(StratifiedKFold(n_splits=n_splits, random_state=42).split(trn_term_doc, label)):
     print('stack:%d/%d' % ((i + 1), n_splits))
 
-    ridge = RidgeClassifier(random_state=42)
+    # ridge = RidgeClassifier(random_state=42)
+    ridge = SGDClassifier(random_state=42)
     ridge.fit(trn_term_doc[tr], label[tr])
     score_va = ridge._predict_proba_lr(trn_term_doc[va])
     score_te = ridge._predict_proba_lr(test_term_doc)
@@ -137,4 +140,4 @@ results['label1'] = lbl.inverse_transform(results['label1'].apply(lambda x: int(
 results['label2'] = lbl.inverse_transform(results['label2'].apply(lambda x: int(x)).values)
 
 # 结合id列，保存：
-pd.concat([test[['id']], results[['label1', 'label2']]], axis=1).to_csv('../data/submit/baseline.csv', index=None, encoding='utf8')
+pd.concat([test[['id']], results[['label1', 'label2']]], axis=1).to_csv('../data/submit/baseline_sgd.csv', index=None, encoding='utf8')
