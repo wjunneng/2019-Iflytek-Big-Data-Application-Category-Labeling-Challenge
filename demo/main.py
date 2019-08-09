@@ -7,6 +7,9 @@ def main():
     apptype_id_name = get_apptype_id_name()
     apptype_train = get_apptype_train()
 
+    # 预判断
+    app_desc = get_app_desc_apptype(app_desc, apptype_id_name)
+
     # 获取label1/label2特征列
     apptype_train = get_label1_label2(apptype_train)
 
@@ -23,11 +26,8 @@ def main():
     # 交叉验证
     stack_train, stack_test = cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc)
 
-    # 线下准确率
-    get_offline_accuracy(apptype_train, stack_train)
-
-    # 获取测试结果
-    get_prediction(apptype_train, app_desc, stack_test, lbl)
+    # 线下准确率+测试结果
+    get_offline_accuracy(apptype_train, app_desc, stack_train, stack_test, lbl)
 
 
 if __name__ == '__main__':

@@ -8,8 +8,9 @@ def get_app_desc(**params):
     :param params:
     :return:
     """
-    app_desc_path = DefaultConfig.app_desc_path
-    app_desc_data = pd.read_table(app_desc_path, header=None, sep='\t', names=['id', 'conment'])
+    app_desc_data = pd.read_csv(DefaultConfig.app_desc_path, header=None, encoding='utf8', delimiter=' ')
+    # 以tab键分割，不知道为啥delimiter='\t'会报错，所以先读入再分割。
+    app_desc_data = pd.DataFrame(app_desc_data[0].apply(lambda x: x.split('\t')).tolist(), columns=['id', 'conment'])
 
     return app_desc_data
 
@@ -38,6 +39,56 @@ def get_apptype_train(**params):
                                       columns=['id', 'label', 'conment'])
 
     return apptype_train_data
+
+
+def get_app_desc_apptype(app_desc, apptype_id_name, save=True, **params):
+    """
+    预判断app_desc的label, 根据apptype_id_name中的label是否存在于conment中，来标注label_id
+    :param app_desc:
+    :param apptype_id_name:
+    :param params:
+    :return:
+    """
+    import os
+
+    if os.path.exists(DefaultConfig.app_desc_apptype_path):
+        app_desc = reduce_mem_usage(
+            pd.read_hdf(path_or_buf=DefaultConfig.app_desc_apptype_path, mode='r', key='app_desc_apptype'))
+    else:
+        index = 0
+        for i in range(apptype_id_name.shape[0]):
+            if len(str(apptype_id_name.iloc[i, 0])) < 6:
+                continue
+            else:
+                index = i
+                break
+
+        result = []
+        for raw_app_desc in range(app_desc.shape[0]):
+            if raw_app_desc % 10000 == 1:
+                print(raw_app_desc)
+
+            counts_dict = {}
+            for raw_apptype_id_name in range(index, apptype_id_name.shape[0]):
+                # 父字符串
+                father = app_desc.iloc[raw_app_desc, 1]
+                # 子字符串
+                son = apptype_id_name.iloc[raw_apptype_id_name, 1]
+                # 出现次数
+                counts = father.count(son)
+                # 如果出现次数大于等于8次， 则记录
+                if counts >= 8:
+                    counts_dict[str(apptype_id_name.iloc[raw_apptype_id_name, 0])] = counts
+
+            counts_dict_sorted = sorted(counts_dict.items(), key=lambda x: x[1], reverse=True)
+            result.append([i[0] for i in counts_dict_sorted])
+
+        app_desc['label'] = result
+
+        if save:
+            app_desc.to_hdf(path_or_buf=DefaultConfig.app_desc_apptype_path, key='app_desc_apptype')
+
+    return app_desc
 
 
 def get_stopwords(**params):
@@ -236,6 +287,7 @@ def get_label_encoder(apptype_train, columns: list = None, **params):
     """
     from sklearn import preprocessing
 
+    lbl = None
     for column in columns:
         # 构造标签属性
         lbl = preprocessing.LabelEncoder()
@@ -248,43 +300,21 @@ def get_label_encoder(apptype_train, columns: list = None, **params):
 
 
 def cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc, **params):
+    """
+    k折交叉验证
+    :param apptype_train:
+    :param app_desc:
+    :param apptype_train_term_doc:
+    :param app_desc_term_doc:
+    :param params:
+    :return:
+    """
     import time
     import numpy as np
     from sklearn.model_selection import StratifiedKFold
-    # 集成方法分类器
-    from sklearn.ensemble import AdaBoostClassifier
-    from sklearn.ensemble import BaggingClassifier
-    from sklearn.ensemble import ExtraTreesClassifier
-    from sklearn.ensemble import GradientBoostingClassifier
-    from sklearn.ensemble import RandomForestClassifier
-
-    # 高斯过程分类器
-    from sklearn.gaussian_process import GaussianProcessClassifier
-
-    # 广义线性分类器
-    from sklearn.linear_model import PassiveAggressiveClassifier
-    from sklearn.linear_model import RidgeClassifier
-    from sklearn.linear_model import SGDClassifier
-
-    # K近邻分类器
-    from sklearn.neighbors import KNeighborsClassifier
-
-    # 朴素贝叶斯分类器
-    from sklearn.naive_bayes import GaussianNB
-
-    # 神经网络分类器
-    from sklearn.neural_network import MLPClassifier
-
-    # 决策树分类器
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.tree import ExtraTreeClassifier
-
-    # 支持向量机分类器
-    from sklearn.svm import SVC
-    from sklearn.svm import LinearSVC
-
-    from xgboost import XGBClassifier
     from sklearn import metrics
+
+    from demo.config import DefaultConfig
 
     # 类别数 122
     num_class = apptype_train['label1'].max() + 1
@@ -300,14 +330,7 @@ def cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_t
         print('stack:%d/%d' % ((i + 1), n_splits))
         start = time.clock()
 
-        # 0.608/0.744
-        # model = RidgeClassifier(random_state=2019)
-        # 0.552/0.672
-        # model = PassiveAggressiveClassifier(random_state=2019)
-        # 0.607/0.725
-        model = SGDClassifier(random_state=2019)
-
-        model.fit(apptype_train_term_doc[tr], label[tr])
+        model = DefaultConfig.select_model.fit(apptype_train_term_doc[tr], label[tr])
         score_va = model._predict_proba_lr(apptype_train_term_doc[va])
         score_te = model._predict_proba_lr(app_desc_term_doc)
 
@@ -321,7 +344,7 @@ def cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_t
     return stack_train, stack_test
 
 
-def get_offline_accuracy(apptype_train, stack_train, **params):
+def get_offline_accuracy(apptype_train, app_desc, stack_train, stack_test, lbl, **params):
     """
     返回线下准确率
     :return:
@@ -352,16 +375,6 @@ def get_offline_accuracy(apptype_train, stack_train, **params):
             pass
     print('线下准确率：%f' % (k / len(label)))
 
-
-def get_prediction(apptype_train, app_desc, stack_test, lbl, **params):
-    """
-    获取结果
-    :param stack_test:
-    :param params:
-    :return:
-    """
-    import numpy as np
-
     # 准备测试集结果：
     results = pd.DataFrame(stack_test)
     first = []
@@ -383,30 +396,29 @@ def get_prediction(apptype_train, app_desc, stack_test, lbl, **params):
     results['label2'] = lbl.inverse_transform(results['label2'].apply(lambda x: int(x)).values)
 
     # 结合id列，保存：
+    print(DefaultConfig.select_model.__str__().split('(')[0])
 
-    # pd.concat([app_desc[['id']], results[['label1', 'label2']]], axis=1).to_csv('../data/submit/baseline_ridge.csv',
-    #                                                                             index=None,
-    #                                                                             encoding='utf8')
+    import time
+    start = time.clock()
 
-    # pd.concat([app_desc[['id']], results[['label1', 'label2']]], axis=1).to_csv(
-    #     '../data/submit/baseline_passiveAggressive.csv',
-    #     index=None,
-    #     encoding='utf8')
+    label1_list = []
+    label2_list = []
+    for i in range(app_desc.shape[0]):
+        if i % 10000 == 1:
+            print(i)
 
-    pd.concat([app_desc[['id']], results[['label1', 'label2']]], axis=1).to_csv(
-        '../data/submit/baseline_sgd.csv',
+        original = app_desc.ix[i, 'label']
+        original.append(results.ix[i, 'label1'])
+        original.append(results.ix[i, 'label2'])
+        label1_list.append(original[0])
+        label2_list.append(original[1])
+
+    app_desc['label1'] = label1_list
+    app_desc['label2'] = label2_list
+
+    print(time.clock() - start)
+
+    pd.concat([app_desc[['id', 'label1', 'label2']]], axis=1).to_csv(
+        '../data/submit/baseline_' + DefaultConfig.select_model.__str__().split('(')[0] + '.csv',
         index=None,
         encoding='utf8')
-
-# if __name__ == '__main__':
-#     # app_desc
-#     result = get_app_desc()
-#     print(result.head())
-#
-#     # apptype_id_name
-#     result = get_apptype_id_name()
-#     print(result.head())
-#
-#     # apptype_train
-#     result = get_apptype_train()
-#     print(result.head())
