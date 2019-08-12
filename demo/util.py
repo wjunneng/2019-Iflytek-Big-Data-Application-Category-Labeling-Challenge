@@ -1,4 +1,5 @@
 import pandas as pd
+
 from demo.config import DefaultConfig
 
 
@@ -51,7 +52,7 @@ def get_app_desc_apptype(app_desc, apptype_id_name, save=True, **params):
     """
     import os
 
-    if os.path.exists(DefaultConfig.app_desc_apptype_path):
+    if os.path.exists(DefaultConfig.app_desc_apptype_path) and DefaultConfig.not_replace:
         app_desc = reduce_mem_usage(
             pd.read_hdf(path_or_buf=DefaultConfig.app_desc_apptype_path, mode='r', key='app_desc_apptype'))
     else:
@@ -110,6 +111,23 @@ def get_label1_label2(df, **params):
     """
     df['label1'] = df['label'].apply(lambda x: x.split('|')[0])
     df['label2'] = df['label'].apply(lambda x: x.split('|')[1] if '|' in x else 0)
+
+    return df
+
+
+def add_new_apptype_train_data(df, **params):
+    """
+    实现将具备两个label的数据转化为两条记录
+    :param df:
+    :param params:
+    :return:
+    """
+    df_new = df[df['label2'] != 0]
+    df_new['label1'] = df['label2']
+    # 合并数据
+    df = pd.concat([df, df_new], axis=0)
+    # label2列清空
+    df['label2'] = 0
 
     return df
 
@@ -234,7 +252,6 @@ def load_sparse_mat(name, filename='store.h5'):
         attributes = []
         for attribute in ('data', 'indices', 'indptr', 'shape'):
             attributes.append(getattr(f.root, f'{name}_{attribute}').read())
-
             # construct sparse matrix
     M = sparse.csr_matrix(tuple(attributes[:3]), shape=attributes[3])
     return M
@@ -254,7 +271,7 @@ def get_term_doc(apptype_train, app_desc, save=True, **params):
     apptype_train_term_doc_path = DefaultConfig.apptype_train_term_doc_path
     app_desc_term_doc_path = DefaultConfig.app_desc_term_doc_path
 
-    if os.path.exists(apptype_train_term_doc_path) and os.path.exists(app_desc_term_doc_path):
+    if os.path.exists(apptype_train_term_doc_path) and os.path.exists(app_desc_term_doc_path) and DefaultConfig.not_replace:
         apptype_train_term_doc = load_sparse_mat(name='apptype_train_term_doc', filename=apptype_train_term_doc_path)
         app_desc_term_doc = load_sparse_mat(name='app_desc_term_doc', filename=app_desc_term_doc_path)
     else:
@@ -342,6 +359,67 @@ def cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_t
           metrics.accuracy_score(label, np.argmax(stack_train, axis=1), normalize=True, sample_weight=None))
 
     return stack_train, stack_test
+
+
+def lgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc, **params):
+    """
+    lgb模型
+    :param apptype_train:
+    :param app_desc:
+    :param apptype_train_term_doc:
+    :param app_desc_term_doc:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    from lightgbm import LGBMClassifier
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn import metrics
+
+    # 类别数 122
+    num_class = apptype_train['label1'].max() + 1
+    # 类别
+    label = apptype_train['label1']
+
+    n_splits = 5
+
+    params = {
+        'boosting_type': 'gbdt',
+        'objective': 'multiclass',
+        'nthread': -1,
+        'silent': True,  # 是否打印信息，默认False
+        'learning_rate': 0.1,
+        'num_leaves': 80,
+        'max_depth': 7,  # 第二次交叉验证得到的参数
+        'max_bin': 127,
+        'subsample_for_bin': 50000,
+        'subsample': 0.8,
+        'subsample_freq': 1,
+        'colsample_bytree': 0.8,
+        'reg_alpha': 1,
+        'reg_lambda': 0,
+        'min_split_gain': 0.0,
+        'min_child_weight': 3,  # 第二次交叉验证得到的参数
+        'min_child_samples': 20,
+        'scale_pos_weight': 1
+    }
+
+    oof_lgb = np.zeros((apptype_train.shape[0], num_class))
+    prediction_lgb = np.zeros((app_desc.shape[0], num_class))
+    for i, (tr, va) in enumerate(
+            StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019).split(apptype_train_term_doc, label)):
+        print('fold:', i + 1, 'training')
+        # 训练：
+        bst = LGBMClassifier(**params).fit(X=apptype_train_term_doc[tr], y=label[tr])
+        # 预测验证集：
+        oof_lgb[va] += bst.predict_proba(apptype_train_term_doc[va], num_iteration=bst.best_iteration_)
+        # 预测测试集：
+        prediction_lgb += bst.predict_proba(app_desc_term_doc, num_iteration=bst.best_iteration_)
+
+    print("model acc_score:",
+          metrics.accuracy_score(label, np.argmax(oof_lgb, axis=1), normalize=True, sample_weight=None))
+
+    return oof_lgb, prediction_lgb
 
 
 def get_offline_accuracy(apptype_train, app_desc, stack_train, stack_test, lbl, **params):

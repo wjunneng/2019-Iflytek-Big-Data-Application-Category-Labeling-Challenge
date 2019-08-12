@@ -17,8 +17,10 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.linear_model import RidgeClassifier
 from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import RidgeClassifierCV
 
 # K近邻分类器
+from sklearn.linear_model.base import LinearClassifierMixin, SparseCoefMixin
 from sklearn.neighbors import KNeighborsClassifier
 
 # 朴素贝叶斯分类器
@@ -75,7 +77,7 @@ class DefaultConfig(object):
     RandomForestClassifier_model = RandomForestClassifier()
     GaussianProcessClassifier_model = GaussianProcessClassifier()
     PassiveAggressiveClassifier_model = PassiveAggressiveClassifier()
-    RidgeClassifier_model = RidgeClassifier(random_state=2019)
+    RidgeClassifier_model = RidgeClassifier(normalize=True, max_iter=1000, random_state=2019)
     SGDClassifier_model = SGDClassifier()
     KNeighborsClassifier_model = KNeighborsClassifier()
     GaussianNB_model = GaussianNB()
@@ -86,9 +88,15 @@ class DefaultConfig(object):
     LinearSVC_model = LinearSVC()
     XGBClassifier_model = XGBClassifier()
     LGBMClassifier_model = LGBMClassifier()
+    LinearClassifierMixin_model = LinearClassifierMixin()
+    RidgeClassifierCV_model = RidgeClassifierCV()
+    SparseCoefMixin_model = SparseCoefMixin()
 
     # 选中的模型
-    select_model = RidgeClassifier_model
+    select_model = 'lgb'
+
+    # replace 是否进行替换
+    not_replace = True
 
 
 # 0.608/0.744  76.43278
