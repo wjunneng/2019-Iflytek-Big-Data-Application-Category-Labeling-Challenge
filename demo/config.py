@@ -69,6 +69,11 @@ class DefaultConfig(object):
     # app_desc_apptype 对app_desc进行预判断
     app_desc_apptype_path = project_path + '/data/cache/app_desc_apptype.h5'
 
+    # apptype_train_classification.h5文件路径
+    apptype_train_classification_path = project_path + '/data/cache/apptype_train_classification.h5'
+    # app_desc_classification.h5文件路径
+    app_desc_classification_path = project_path + '/data/cache/app_desc_classification.h5'
+
     # 单模型
     AdaBoostClassifier_model = AdaBoostClassifier()
     BaggingClassifier_model = BaggingClassifier()
@@ -77,7 +82,7 @@ class DefaultConfig(object):
     RandomForestClassifier_model = RandomForestClassifier()
     GaussianProcessClassifier_model = GaussianProcessClassifier()
     PassiveAggressiveClassifier_model = PassiveAggressiveClassifier()
-    RidgeClassifier_model = RidgeClassifier(normalize=True, max_iter=1000, random_state=2019)
+    RidgeClassifier_model = RidgeClassifier(tol=1e-2, solver="sag", normalize=True, max_iter=1000, random_state=2019)
     SGDClassifier_model = SGDClassifier()
     KNeighborsClassifier_model = KNeighborsClassifier()
     GaussianNB_model = GaussianNB()
@@ -93,7 +98,8 @@ class DefaultConfig(object):
     SparseCoefMixin_model = SparseCoefMixin()
 
     # 选中的模型
-    select_model = 'lgb'
+    # select_model = 'lgb'
+    select_model = RidgeClassifier_model
 
     # replace 是否进行替换
     not_replace = True

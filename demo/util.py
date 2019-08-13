@@ -132,6 +132,100 @@ def add_new_apptype_train_data(df, **params):
     return df
 
 
+def get_classification(df, **params):
+    """
+    返回 类别
+    :param df:
+    :param params:
+    :return:
+    """
+    result = {}
+
+    # 寻找大类的类别编号
+    for index in range(df.shape[0]):
+        key = df.ix[index, 'label_code']
+        value = df.ix[index, 'label']
+
+        # 处理大类
+        if len(str(key)) == 4:
+            result[str(key)] = [value]
+            # 处理小类
+        else:
+            # 获取前4个字符
+            key_4 = str(key)[:4]
+            # 如果小类属于的大类已经在结果中
+            if key_4 in result.keys():
+                # 如果小类对应的值未存在结果中
+                if value not in result[key_4]:
+                    # 添加
+                    result[key_4].append(value)
+            # 如果小类属于的大类未包含在结果中
+            else:
+                result[key_4] = [value]
+
+    return result
+
+
+def deal_label_code(df, apptype_id_name, type, save=True, **params):
+    """
+    处理类别特征
+    :param df:
+    :param apptype_id_name:
+    :param params:
+    :return:
+    """
+    from scipy.sparse import csr_matrix
+    import numpy as np
+    import os
+    import time
+
+    assert list(df.columns) == ['id', 'conment']
+
+    result = None
+    if os.path.exists(DefaultConfig.apptype_train_classification_path) and os.path.exists(DefaultConfig.app_desc_classification_path):
+        if type is 'train':
+            result = load_sparse_mat(name='apptype_train_classification', filename=DefaultConfig.apptype_train_classification_path)
+        if type is 'test':
+            result = load_sparse_mat(name='app_desc_classification', filename=DefaultConfig.app_desc_classification_path)
+    else:
+        classification = get_classification(apptype_id_name)
+
+        start = time.clock()
+        conments = df['conment']
+        keys = classification.keys()
+        for index in range(df.shape[0]):
+            if index % 1000 == 1:
+                print(index)
+                print(time.clock() - start)
+            # 获取内容
+            conment = conments[index]
+            for column in keys:
+                # 计算出现次数
+                counts = 0
+                # 取label_code 对应的label
+                for label in classification[column]:
+                    counts += conment.count(label)
+                # 赋值
+                df[index, column] = counts
+
+        print('内耗：%s' % str(time.clock() - start))
+
+        if 'id' in list(df.columns):
+            del df['id']
+
+        # 标准化
+        df.apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x)))
+        result = csr_matrix(df.values)
+
+        if type is 'train' and save:
+            store_sparse_mat(M=result, name='apptype_train_classification',
+                             filename=DefaultConfig.apptype_train_classification_path)
+        if type is 'train' and save:
+            store_sparse_mat(M=result, name='app_desc_classification',
+                             filename=DefaultConfig.app_desc_classification_path)
+    return result
+
+
 def delete_counts_less_than_k(df, k, **params):
     """
     删除出现次数少于k次的 数据
@@ -388,20 +482,14 @@ def lgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc
         'objective': 'multiclass',
         'nthread': -1,
         'silent': True,  # 是否打印信息，默认False
-        'learning_rate': 0.1,
-        'num_leaves': 80,
+        'learning_rate': 0.01,
+        'num_leaves': 1000,
         'max_depth': 7,  # 第二次交叉验证得到的参数
         'max_bin': 127,
-        'subsample_for_bin': 50000,
+        'subsample_for_bin': 1000,
         'subsample': 0.8,
         'subsample_freq': 1,
         'colsample_bytree': 0.8,
-        'reg_alpha': 1,
-        'reg_lambda': 0,
-        'min_split_gain': 0.0,
-        'min_child_weight': 3,  # 第二次交叉验证得到的参数
-        'min_child_samples': 20,
-        'scale_pos_weight': 1
     }
 
     oof_lgb = np.zeros((apptype_train.shape[0], num_class))
@@ -420,6 +508,62 @@ def lgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc
           metrics.accuracy_score(label, np.argmax(oof_lgb, axis=1), normalize=True, sample_weight=None))
 
     return oof_lgb, prediction_lgb
+
+
+def xgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc, **params):
+    """
+    xgb模型
+    :param apptype_train:
+    :param app_desc:
+    :param apptype_train_term_doc:
+    :param app_desc_term_doc:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    from xgboost import XGBClassifier
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn import metrics
+
+    # 类别数 122
+    num_class = apptype_train['label1'].max() + 1
+    # 类别
+    label = apptype_train['label1']
+
+    n_splits = 5
+
+    params = {
+        'boosting_type': 'gbdt',
+        'objective': 'multiclass',
+        'nthread': -1,
+        'silent': True,  # 是否打印信息，默认False
+        'learning_rate': 0.01,
+        'num_leaves': 1000,
+        'max_depth': 7,  # 第二次交叉验证得到的参数
+        'max_bin': 127,
+        'subsample_for_bin': 1000,
+        'subsample': 0.8,
+        'subsample_freq': 1,
+        'colsample_bytree': 0.8,
+    }
+
+    oof_xgb = np.zeros((apptype_train.shape[0], num_class))
+    prediction_xgb = np.zeros((app_desc.shape[0], num_class))
+    for i, (tr, va) in enumerate(
+            StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=2019).split(apptype_train_term_doc, label)):
+        print('fold:', i + 1, 'training')
+        # 训练：
+        bst = XGBClassifier(**params)
+        bst.fit(X=apptype_train_term_doc[tr], y=label[tr])
+        # 预测验证集：
+        oof_xgb[va] += bst.predict_proba(apptype_train_term_doc[va])
+        # 预测测试集：
+        prediction_xgb += bst.predict_proba(app_desc_term_doc)
+
+    print("model acc_score:",
+          metrics.accuracy_score(label, np.argmax(oof_xgb, axis=1), normalize=True, sample_weight=None))
+
+    return oof_xgb, prediction_xgb
 
 
 def get_offline_accuracy(apptype_train, app_desc, stack_train, stack_test, lbl, **params):
