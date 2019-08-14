@@ -1,6 +1,6 @@
 import pandas as pd
 
-from demo.config import DefaultConfig
+from config import DefaultConfig
 
 
 def get_app_desc(**params):
@@ -163,6 +163,10 @@ def get_classification(df, **params):
             else:
                 result[key_4] = [value]
 
+    # 将list 转化为 dict
+    for key in result.keys():
+        result[key] = dict.fromkeys(result[key], True)
+
     return result
 
 
@@ -177,50 +181,59 @@ def deal_label_code(df, apptype_id_name, type, save=True, **params):
     from scipy.sparse import csr_matrix
     import numpy as np
     import os
-    import time
 
     assert list(df.columns) == ['id', 'conment']
 
     result = None
-    if os.path.exists(DefaultConfig.apptype_train_classification_path) and os.path.exists(DefaultConfig.app_desc_classification_path):
+    if os.path.exists(DefaultConfig.apptype_train_classification_path) and os.path.exists(
+            DefaultConfig.app_desc_classification_path):
         if type is 'train':
-            result = load_sparse_mat(name='apptype_train_classification', filename=DefaultConfig.apptype_train_classification_path)
+            result = load_sparse_mat(name='apptype_train_classification',
+                                     filename=DefaultConfig.apptype_train_classification_path)
         if type is 'test':
-            result = load_sparse_mat(name='app_desc_classification', filename=DefaultConfig.app_desc_classification_path)
+            result = load_sparse_mat(name='app_desc_classification',
+                                     filename=DefaultConfig.app_desc_classification_path)
     else:
         classification = get_classification(apptype_id_name)
 
-        start = time.clock()
+        # 内容
         conments = df['conment']
-        keys = classification.keys()
+        # 将list 转化为 dict Python 字典中使用了 hash table，因此查找操作的复杂度为 O(1)，
+        # 而 list 实际是个数组，在 list 中，查找需要遍历整个 list，其复杂度为 O(n)，因此对成员的查找访问等操作字典要比 list 更快。
+        keys = dict.fromkeys(classification.keys(), True)
+        # 添加多列
+        df = pd.concat([df, pd.DataFrame(columns=classification.keys())], sort=False)
+        # 删除 ‘id’, 'conment' 列
+        del df['id']
+        del df['conment']
+
+        counts_all = []
         for index in range(df.shape[0]):
             if index % 1000 == 1:
                 print(index)
-                print(time.clock() - start)
+
             # 获取内容
             conment = conments[index]
+
+            # 每行的数目
+            counts = []
             for column in keys:
                 # 计算出现次数
-                counts = 0
-                # 取label_code 对应的label
-                for label in classification[column]:
-                    counts += conment.count(label)
-                # 赋值
-                df[index, column] = counts
+                counts.append(sum([conment.count(label) for label in classification[column]]))
 
-        print('内耗：%s' % str(time.clock() - start))
+            counts_all.append(counts)
 
-        if 'id' in list(df.columns):
-            del df['id']
+        # 为df赋值
+        df = pd.DataFrame(data=np.array(counts_all), columns=df.columns)
 
         # 标准化
-        df.apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x)))
+        df = df.apply(lambda x: (x - np.min(x)) / (np.max(x) - np.min(x)))
         result = csr_matrix(df.values)
 
         if type is 'train' and save:
             store_sparse_mat(M=result, name='apptype_train_classification',
                              filename=DefaultConfig.apptype_train_classification_path)
-        if type is 'train' and save:
+        if type is 'test' and save:
             store_sparse_mat(M=result, name='app_desc_classification',
                              filename=DefaultConfig.app_desc_classification_path)
     return result
@@ -365,7 +378,8 @@ def get_term_doc(apptype_train, app_desc, save=True, **params):
     apptype_train_term_doc_path = DefaultConfig.apptype_train_term_doc_path
     app_desc_term_doc_path = DefaultConfig.app_desc_term_doc_path
 
-    if os.path.exists(apptype_train_term_doc_path) and os.path.exists(app_desc_term_doc_path) and DefaultConfig.not_replace:
+    if os.path.exists(apptype_train_term_doc_path) and os.path.exists(
+            app_desc_term_doc_path) and DefaultConfig.not_replace:
         apptype_train_term_doc = load_sparse_mat(name='apptype_train_term_doc', filename=apptype_train_term_doc_path)
         app_desc_term_doc = load_sparse_mat(name='app_desc_term_doc', filename=app_desc_term_doc_path)
     else:
@@ -424,8 +438,6 @@ def cross_validation(apptype_train, app_desc, apptype_train_term_doc, app_desc_t
     import numpy as np
     from sklearn.model_selection import StratifiedKFold
     from sklearn import metrics
-
-    from demo.config import DefaultConfig
 
     # 类别数 122
     num_class = apptype_train['label1'].max() + 1
@@ -508,6 +520,83 @@ def lgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc
           metrics.accuracy_score(label, np.argmax(oof_lgb, axis=1), normalize=True, sample_weight=None))
 
     return oof_lgb, prediction_lgb
+
+
+def lgb_model_hyperparameter(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc, **params):
+    """
+    参数设置
+    :param apptype_train:
+    :param app_desc:
+    :param apptype_train_term_doc:
+    :param app_desc_term_doc:
+    :param params:
+    :return:
+    """
+    import numpy as np
+    import lightgbm as lgb
+    from sklearn.model_selection import train_test_split
+
+    # 用sklearn.cross_validation进行训练数据集划分，这里训练集和交叉验证集比例为7：3，可以自己根据需要设置
+    X, val_X, y, val_y = train_test_split(
+        apptype_train_term_doc,
+        apptype_train['label1'],
+        test_size=0.2,
+        random_state=1,
+        # 这里保证分割后y的比例分布与原数据一致
+        stratify=apptype_train['label1']
+    )
+
+    X_train = X
+    y_train = y
+    X_test = val_X
+    y_test = val_y
+
+    # create dataset for lightgbm
+    lgb_train = lgb.Dataset(X_train, y_train)
+    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+    # specify your configurations as a dict
+    params = {
+        'boosting_type': 'gbdt',
+        'objective': 'multiclass',
+        'num_class': 9,
+        'metric': 'multi_error',
+        'num_leaves': 300,
+        'min_data_in_leaf': 100,
+        'learning_rate': 0.01,
+        'feature_fraction': 0.8,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'lambda_l1': 0.4,
+        'lambda_l2': 0.5,
+        'min_gain_to_split': 0.2,
+        'verbose': 5,
+        'is_unbalance': True
+    }
+
+    # train
+    print('Start training...')
+    gbm = lgb.train(params,
+                    lgb_train,
+                    num_boost_round=10000,
+                    valid_sets=lgb_eval,
+                    early_stopping_rounds=500)
+
+    print('Start predicting...')
+    preds = gbm.predict(app_desc_term_doc, num_iteration=gbm.best_iteration)  # 输出的是概率结果
+
+    # 导出结果
+    for pred in preds:
+        prediction = int(np.argmax(pred))
+
+    # 导出特征重要性
+    importance = gbm.feature_importance()
+    names = gbm.feature_name()
+    with open('../data/feature_importance.txt', 'w+') as file:
+        for index, im in enumerate(importance):
+            string = names[index] + ', ' + str(im) + '\n'
+            file.write(string)
+
+    return prediction
 
 
 def xgb_model(apptype_train, app_desc, apptype_train_term_doc, app_desc_term_doc, **params):

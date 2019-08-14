@@ -38,8 +38,8 @@ from sklearn.svm import SVC
 from sklearn.svm import LinearSVC
 
 # 提升树
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
+# from xgboost import XGBClassifier
+# from lightgbm import LGBMClassifier
 
 
 class DefaultConfig(object):
@@ -82,7 +82,7 @@ class DefaultConfig(object):
     RandomForestClassifier_model = RandomForestClassifier()
     GaussianProcessClassifier_model = GaussianProcessClassifier()
     PassiveAggressiveClassifier_model = PassiveAggressiveClassifier()
-    RidgeClassifier_model = RidgeClassifier(tol=1e-2, solver="sag", normalize=True, max_iter=1000, random_state=2019)
+    RidgeClassifier_model = RidgeClassifier(alpha=0.8, tol=0.1, solver="sag", normalize=True, max_iter=1000, random_state=2019)
     SGDClassifier_model = SGDClassifier()
     KNeighborsClassifier_model = KNeighborsClassifier()
     GaussianNB_model = GaussianNB()
@@ -91,15 +91,16 @@ class DefaultConfig(object):
     ExtraTreeClassifier_model = ExtraTreeClassifier()
     SVC_model = SVC()
     LinearSVC_model = LinearSVC()
-    XGBClassifier_model = XGBClassifier()
-    LGBMClassifier_model = LGBMClassifier()
+    # XGBClassifier_model = XGBClassifier()
+    # LGBMClassifier_model = LGBMClassifier()
     LinearClassifierMixin_model = LinearClassifierMixin()
     RidgeClassifierCV_model = RidgeClassifierCV()
     SparseCoefMixin_model = SparseCoefMixin()
 
     # 选中的模型
-    # select_model = 'lgb'
     select_model = RidgeClassifier_model
+    # select_model = 'lgb'
+    # select_model = 'fast_text'
 
     # replace 是否进行替换
     not_replace = True
