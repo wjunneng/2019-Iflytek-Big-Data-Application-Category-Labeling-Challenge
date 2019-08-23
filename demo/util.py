@@ -1,6 +1,6 @@
 import pandas as pd
 
-from config import DefaultConfig
+from demo.config import DefaultConfig
 
 
 def get_app_desc(**params):
@@ -99,7 +99,7 @@ def get_stopwords(**params):
     :return:
     """
     with open(DefaultConfig.stopwords_path, 'r') as file:
-        return file.readlines()
+        return set(file.readlines())
 
 
 def get_label1_label2(df, **params):

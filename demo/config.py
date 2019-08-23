@@ -74,6 +74,12 @@ class DefaultConfig(object):
     # app_desc_classification.h5文件路径
     app_desc_classification_path = project_path + '/data/cache/app_desc_classification.h5'
 
+    # apptype_train_word_index.h5
+    apptype_train_word_index_path = project_path + '/data/cache/apptype_train_word_index.h5'
+    # app_desc_word_index.h5
+    app_desc_word_index_path = project_path + '/data/cache/app_desc_word_index.h5'
+
+
     # 单模型
     AdaBoostClassifier_model = AdaBoostClassifier()
     BaggingClassifier_model = BaggingClassifier()
@@ -103,7 +109,7 @@ class DefaultConfig(object):
     # select_model = 'fast_text'
 
     # replace 是否进行替换
-    not_replace = True
+    not_replace = False
 
 
 # 0.608/0.744  76.43278
